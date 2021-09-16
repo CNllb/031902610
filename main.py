@@ -17,7 +17,7 @@ class File:
         self.head_alphabet = {}  # 存放头部字母
         self.split_word = Schema('wubi98')  # 引入pychai，使用五笔98版
         self.split_word.run()
-        self.al_occurred = {}
+        self.al_occurred = {}  # 用来标记敏感词文本的行号和敏感词词头位置
         self.pass_list = {}
         self.pass_list_another = {}
 
@@ -133,130 +133,138 @@ class File:
 
     # 对单行字符串进行检验，找出敏感词位置，并返回结果
     def get_single_line_sensi_word(self, words, lines_count):
-        start_index = -1
-        scan_mode = -1  # 1检测中文
-        original_length = -1
-        result_position = []
+        search_chinese = -1  # 使用1和-1进行识别遍历，1表示汉字
+        start_position = -1  # 表示敏感词在该行的位置
+        issensi_pages_len = -1  # 表示敏感词文本的长度
+        result_position_list = []  # 存放遍历结果的敏感词数组
         now_point = self.sensi_word_trie_tree
-        index_text = 0
-        temp_now_map = {}
-        ingore_index = -1
-        while index_text < len(words):
-            key = words[index_text]
-            if key.isalpha():
-                key = key.lower()  # 一律改小写
-            if '\u4e00' <= key <= '\u9fff':
-                key = convert(key, 'zh-hans')  # 一律转简体
+        words_position = 0
+        cur_list = {}
+        skip_position = -1
+        while words_position < len(words):
+            cur_word = words[words_position]
+            # 如果当前字段为汉字，则将其转换为简体汉字
+            if '\u4e00' <= cur_word <= '\u9fff':
+                cur_word = convert(cur_word, 'zh-hans')
 
-            if not key.isalpha() and not ('\u4e00' <= key <= '\u9fff'):  # 去除掉 符号 空格等
-                original_length += 1
-                index_text += 1
+            # 如果当前字段为字母，则将其转换为小写字母
+            if cur_word.isalpha():
+                cur_word = cur_word.lower()
+
+            # 如果当前字段非字母或者汉字，跳过，即跳过特殊符号，以实现跳词
+            if not cur_word.isalpha() and not ('\u4e00' <= cur_word <= '\u9fff'):
+                issensi_pages_len += 1
+                words_position += 1
                 continue
-            search_flag = key in now_point
+
+            # 判断当前字段是否在敏感词trie树中
+            search_flag = cur_word in now_point
             if search_flag:
-                now_point = now_point.get(key)
-                if now_point.get("End_flag") == 1:  # 结束识别
-                    if not temp_now_map and now_point.get("More"):
-                        if index_text == len(words) - 2:
-                            if str(lines_count) + str(start_index) not in self.al_occurred.keys():
-                                result_position.append(
-                                    (start_index, original_length, self.trans_sensi_words[now_point.get("sensi_word")]))
+                now_point = now_point.get(cur_word)
+                if now_point.get("End_flag") == 1:
+                    if not cur_list and now_point.get("More"):
+                        if words_position == len(words) - 2:
+                            if str(lines_count) + str(start_position) not in self.al_occurred.keys():
+                                result_position_list.append(
+                                    (start_position, issensi_pages_len, self.trans_sensi_words[now_point.get("sensi_word")]))
                             self.al_occurred[str(
-                                lines_count) + str(start_index)] = 1
-                            now_point = self.sensi_word_trie_tree
-                            original_length = -1
-                            start_index = -1
-                            scan_mode = -1
+                                lines_count) + str(start_position)] = 1
+                            now_point = self.sensi_word_trie_tree  # 查询结束将指针指向根节点
+                            issensi_pages_len = -1
+                            start_position = -1
+                            search_chinese = -1
                             self.total += 1
-                            index_text += 1
-                            temp_now_map = {}
+                            words_position += 1
+                            cur_list = {}
                             continue
-                        temp_now_map = now_point
-                        ingore_index += 1
-                        index_text += 1
-                        original_length += 1
+                        cur_list = now_point
+                        skip_position += 1
+                        words_position += 1
+                        issensi_pages_len += 1
                         continue
                     else:
-                        if str(lines_count) + str(start_index) not in self.al_occurred.keys():
-                            result_position.append(
-                                (start_index, original_length, self.trans_sensi_words[now_point.get("sensi_word")]))
+                        if str(lines_count) + str(start_position) not in self.al_occurred.keys():
+                            result_position_list.append(
+                                (start_position, issensi_pages_len, self.trans_sensi_words[now_point.get("sensi_word")]))
                         self.al_occurred[str(lines_count) +
-                                         str(start_index)] = 1
-                        now_point = self.sensi_word_trie_tree
+                                         str(start_position)] = 1
+                        now_point = self.sensi_word_trie_tree   # 查询结束将指针指向根节点
                         self.total += 1
-                        original_length = -1
-                        temp_now_map = {}
-                        index_text += 1
-                        scan_mode = -1
-                        start_index = -1
+                        cur_list = {}
+                        issensi_pages_len = -1
+                        search_chinese = -1
+                        words_position += 1
+                        start_position = -1
                         continue
-                if (now_point.get("Start_flag") == 1) & (start_index == -1):
-                    if scan_mode == -1 and ('\u4e00' <= key <= '\u9fff'):
-                        scan_mode = 1
-                    original_length = 1
-                    start_index = index_text
-                original_length += 1
-                index_text += 1
+                if (now_point.get("Start_flag") == 1) & (start_position == -1):
+                    if search_chinese == -1 and ('\u4e00' <= cur_word <= '\u9fff'):
+                        search_chinese = 1
+                    start_position = words_position
+                    issensi_pages_len = 1
+                issensi_pages_len += 1
+                words_position += 1
             else:
-                if temp_now_map:
-                    if str(lines_count) + str(start_index) not in self.al_occurred.keys():
-                        result_position.append(
-                            (start_index, original_length - 1, self.trans_sensi_words[temp_now_map.get("sensi_word")]))
-                    self.al_occurred[str(lines_count) + str(start_index)] = 1
-                    now_point = self.sensi_word_trie_tree
-                    original_length = -1
-                    start_index = -1
-                    scan_mode = -1
+                if cur_list:
+                    if str(lines_count) + str(start_position) not in self.al_occurred.keys():
+                        result_position_list.append(
+                            (start_position, issensi_pages_len - 1, self.trans_sensi_words[cur_list.get("sensi_word")]))
+                    self.al_occurred[str(lines_count) +
+                                     str(start_position)] = 1
+                    now_point = self.sensi_word_trie_tree   # 查询结束将指针指向根节点
+                    issensi_pages_len = -1
+                    start_position = -1
+                    words_position -= skip_position
+                    search_chinese = -1
                     self.total += 1
-                    index_text -= ingore_index
-                    temp_now_map = {}
+                    cur_list = {}
                     continue
-                if scan_mode == 1:
-                    if key.isalpha() or key.isdecimal():
-                        if not ('\u4e00' <= key <= '\u9fff'):
-                            original_length += 1
-                            index_text += 1
+                if search_chinese == 1:
+                    # 字段为字母或十进制字符
+                    if cur_word.isalpha() or cur_word.isdecimal():
+                        if not ('\u4e00' <= cur_word <= '\u9fff'):
+                            issensi_pages_len += 1
+                            words_position += 1
                             continue
-                if '\u4e00' <= key <= '\u9fff':
-                    pinyin = pypinyin.lazy_pinyin(key)[0]
-                    noYet = True
-                    now_index = index_text
+                if '\u4e00' <= cur_word <= '\u9fff':
+                    flag = True
+                    now_position = words_position
+                    pinyin = pypinyin.lazy_pinyin(cur_word)[0]
                     for i in pinyin:
                         flag_find_pinyin = i in now_point
                         if flag_find_pinyin:
-                            if (now_point.get("Start_flag") == 1) & (start_index == -1):
-                                if scan_mode == -1 and ('\u4e00' <= key <= '\u9fff'):
-                                    scan_mode = 1
-                                original_length = 1
-                                start_index = now_index
+                            if (now_point.get("Start_flag") == 1) & (start_position == -1):
+                                if search_chinese == -1 and ('\u4e00' <= cur_word <= '\u9fff'):
+                                    search_chinese = 1
+                                issensi_pages_len = 1
+                                start_position = now_position
                             now_point = now_point.get(i)
                         else:
-                            noYet = False
+                            flag = False
                             break
-                    if noYet:
-                        original_length += 1
+                    if flag:
+                        issensi_pages_len += 1
                         if now_point.get("End_flag") == 1:
-                            original_length -= 1
-                            if str(lines_count) + str(start_index) not in self.al_occurred.keys():
-                                result_position.append(
-                                    (start_index, original_length, self.trans_sensi_words[now_point.get("sensi_word")]))
+                            issensi_pages_len -= 1
+                            if str(lines_count) + str(start_position) not in self.al_occurred.keys():
+                                result_position_list.append(
+                                    (start_position, issensi_pages_len, self.trans_sensi_words[now_point.get("sensi_word")]))
                             self.al_occurred[str(
-                                lines_count) + str(start_index)] = 1
+                                lines_count) + str(start_position)] = 1
                             now_point = self.sensi_word_trie_tree
-                            original_length = -1
-                            start_index = -1
-                            scan_mode = -1
+                            issensi_pages_len = -1
+                            start_position = -1
+                            search_chinese = -1
                             self.total += 1
-                            index_text += 1
-                            temp_now_map = {}
+                            words_position += 1
+                            cur_list = {}
                             continue
-                        index_text += 1
+                        words_position += 1
                         continue
                 now_point = self.sensi_word_trie_tree
-                start_index = -1
-                original_length = -1
-                index_text += 1
-        return result_position
+                start_position = -1
+                issensi_pages_len = -1
+                words_position += 1
+        return result_position_list
 
     # 获取检测文本，并对读取单行文本内容，对单行文本进行检测，在结果数组中存入结果
     def get_single_line_result(self, filename):
@@ -305,12 +313,13 @@ class File:
 
 
 if __name__ == '__main__':
-    # words_txt = sys.argv[0]
-    # org_txt = sys.argv[1]
-    # ans_txt = sys.argv[2]
-    words_txt = 'example\words.txt'
-    org_txt = 'example\org.txt'
-    ans_txt = 'ans.txt'
+
+    words_txt = sys.argv[1]
+    org_txt = sys.argv[2]
+    ans_txt = sys.argv[3]
+    # words_txt = 'words.txt'
+    # org_txt = 'org.txt'
+    # ans_txt = 'ans.txt'
     f = File()
     f.get_sensi_word(words_txt)
     f.get_single_line_result(org_txt)
