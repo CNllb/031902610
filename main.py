@@ -23,14 +23,19 @@ class File:
 
     # 获取敏感词文件内容
     def get_sensi_word(self, filename):
-        with open(filename, "r", encoding='utf-8') as file:
-            self.original_sensi_word = file.readlines()
-        for line in self.original_sensi_word:
-            line = line.replace('\n', '').replace('\r', '')
-            self.no_processed_sensi_word.append(line)
-        self.sensi_word_pinyin = self.transform_to_pinyin()
-        self.sensi_word_trie_tree = self.build_sensi_word_trie_tree(
-            self.sensi_word_pinyin)
+        try:
+            with open(filename, "r", encoding='utf-8') as file:
+                self.original_sensi_word = file.readlines()
+        except IOError:
+            print("获取敏感词文件异常")
+        else:    
+            for line in self.original_sensi_word:
+                line = line.replace('\n', '').replace('\r', '')
+                self.no_processed_sensi_word.append(line)
+            self.sensi_word_pinyin = self.transform_to_pinyin()
+            self.sensi_word_trie_tree = self.build_sensi_word_trie_tree(
+                self.sensi_word_pinyin)
+
 
     # 将敏感词进行拼音转化，部首拆解，找出敏感词组合【构建敏感词库】
     def transform_to_pinyin(self):
@@ -283,6 +288,7 @@ class File:
             for res in single_line_result:
                 self.result.append("Line" + str(lines_count) + ": <" +
                                    res[2] + "> " + lines[res[0]:res[0] + res[1]] + "\n")
+        
 
     # 输出的文本函数
     def print_out(self, filename):
@@ -313,13 +319,16 @@ class File:
 
 
 if __name__ == '__main__':
-
-    words_txt = sys.argv[1]
-    org_txt = sys.argv[2]
-    ans_txt = sys.argv[3]
-    # words_txt = 'words.txt'
-    # org_txt = 'org.txt'
-    # ans_txt = 'ans.txt'
+    if len(sys.argv) == 1:
+        words_txt = "words.txt"
+        org_txt = "org.txt"
+        ans_txt = "ans.txt"
+    elif len(sys.argv) == 4:
+        words_txt = sys.argv[1]
+        org_txt = sys.argv[2]
+        ans_txt = sys.argv[3]
+    else:
+        print("命令行输入错误")
     f = File()
     f.get_sensi_word(words_txt)
     f.get_single_line_result(org_txt)
